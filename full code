@@ -1,0 +1,419 @@
+/** @jsxImportSource https://esm.sh/react@18.2.0 */
+import React, { useState, useEffect } from "https://esm.sh/react@18.2.0";
+import { createRoot } from "https://esm.sh/react-dom@18.2.0/client";
+
+function QuizPlatform() {
+  const [quizzes, setQuizzes] = useState([]);
+  const [currentQuiz, setCurrentQuiz] = useState(null);
+  const [newQuiz, setNewQuiz] = useState({
+    title: '',
+    description: '',
+    questions: [{ 
+      text: '', 
+      options: ['', '', '', ''], 
+      correctAnswer: 0 
+    }]
+  });
+  const [currentQuizAttempt, setCurrentQuizAttempt] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    fetchQuizzes();
+  }, []);
+
+  const fetchQuizzes = async () => {
+    const response = await fetch('/quizzes');
+    const data = await response.json();
+    setQuizzes(data);
+  };
+
+  const handleQuizSubmit = async (e) => {
+    e.preventDefault();
+    const response = await fetch('/quizzes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newQuiz)
+    });
+    
+    if (response.ok) {
+      fetchQuizzes();
+      setNewQuiz({
+        title: '',
+        description: '',
+        questions: [{ 
+          text: '', 
+          options: ['', '', '', ''], 
+          correctAnswer: 0 
+        }]
+      });
+    }
+  };
+
+  const startQuiz = (quiz) => {
+    setCurrentQuiz(quiz);
+    setCurrentQuizAttempt({
+      quizId: quiz.id,
+      answers: new Array(quiz.questions.length).fill(null),
+      score: 0
+    });
+  };
+
+  const handleAnswerSelect = (questionIndex, optionIndex) => {
+    const newAnswers = [...currentQuizAttempt.answers];
+    newAnswers[questionIndex] = optionIndex;
+    setCurrentQuizAttempt({
+      ...currentQuizAttempt,
+      answers: newAnswers
+    });
+  };
+
+  const submitQuizAttempt = async () => {
+    const response = await fetch('/submit-quiz', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(currentQuizAttempt)
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      alert(`Quiz completed! Your score: ${result.score}/${currentQuiz.questions.length}`);
+      setCurrentQuiz(null);
+      setCurrentQuizAttempt(null);
+    }
+  };
+
+  const addQuestion = () => {
+    setNewQuiz({
+      ...newQuiz,
+      questions: [...newQuiz.questions, { 
+        text: '', 
+        options: ['', '', '', ''], 
+        correctAnswer: 0 
+      }]
+    });
+  };
+
+  const updateQuestion = (index, field, value) => {
+    const updatedQuestions = [...newQuiz.questions];
+    updatedQuestions[index][field] = value;
+    setNewQuiz({ ...newQuiz, questions: updatedQuestions });
+  };
+
+  const filteredQuizzes = quizzes.filter(quiz => 
+    quiz.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    quiz.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (currentQuiz) {
+    return (
+      <div className="quiz-attempt">
+        <h2>{currentQuiz.title}</h2>
+        <p>{currentQuiz.description}</p>
+        {currentQuiz.questions.map((question, qIndex) => (
+          <div key={qIndex} className="quiz-question">
+            <h3>{question.text}</h3>
+            {question.options.map((option, oIndex) => (
+              <button 
+                key={oIndex}
+                onClick={() => handleAnswerSelect(qIndex, oIndex)}
+                className={
+                  currentQuizAttempt.answers[qIndex] === oIndex 
+                    ? 'selected-answer' 
+                    : ''
+                }
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        ))}
+        <button 
+          onClick={submitQuizAttempt}
+          disabled={currentQuizAttempt.answers.some(answer => answer === null)}
+        >
+          Submit Quiz
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="quiz-platform">
+      <h1>🧠 Quiz Master</h1>
+      
+      <div className="quiz-search">
+        <input 
+          type="text" 
+          placeholder="Search quizzes..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      <div className="quiz-creation-form">
+        <h2>Create a New Quiz</h2>
+        <form onSubmit={handleQuizSubmit}>
+          <input 
+            type="text" 
+            placeholder="Quiz Title" 
+            value={newQuiz.title}
+            onChange={(e) => setNewQuiz({...newQuiz, title: e.target.value})}
+            required 
+          />
+          <textarea 
+            placeholder="Quiz Description"
+            value={newQuiz.description}
+            onChange={(e) => setNewQuiz({...newQuiz, description: e.target.value})}
+            required 
+          />
+          
+          {newQuiz.questions.map((question, qIndex) => (
+            <div key={qIndex} className="question-input">
+              <input 
+                type="text"
+                placeholder={`Question ${qIndex + 1}`}
+                value={question.text}
+                onChange={(e) => updateQuestion(qIndex, 'text', e.target.value)}
+                required
+              />
+              {question.options.map((option, oIndex) => (
+                <input 
+                  key={oIndex}
+                  type="text"
+                  placeholder={`Option ${oIndex + 1}`}
+                  value={option}
+                  onChange={(e) => {
+                    const updatedOptions = [...question.options];
+                    updatedOptions[oIndex] = e.target.value;
+                    updateQuestion(qIndex, 'options', updatedOptions);
+                  }}
+                  required
+                />
+              ))}
+              <select 
+                value={question.correctAnswer}
+                onChange={(e) => updateQuestion(qIndex, 'correctAnswer', Number(e.target.value))}
+              >
+                {question.options.map((_, index) => (
+                  <option key={index} value={index}>
+                    Correct Answer: Option {index + 1}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
+          
+          <div className="quiz-form-actions">
+            <button type="button" onClick={addQuestion}>Add Question</button>
+            <button type="submit">Create Quiz</button>
+          </div>
+        </form>
+      </div>
+
+      <div className="quiz-listings">
+        <h2>Available Quizzes</h2>
+        {filteredQuizzes.map(quiz => (
+          <div key={quiz.id} className="quiz-card">
+            <h3>{quiz.title}</h3>
+            <p>{quiz.description}</p>
+            <p><strong>Questions:</strong> {quiz.questions.length}</p>
+            <button onClick={() => startQuiz(quiz)}>Take Quiz</button>
+          </div>
+        ))}
+      </div>
+      
+      <a 
+        href={import.meta.url.replace("esm.town", "val.town")} 
+        target="_top" 
+        style={{ color: '#666', textDecoration: 'none', fontSize: '0.8em' }}
+      >
+        View Source
+      </a>
+    </div>
+  );
+}
+
+function client() {
+  createRoot(document.getElementById("root")).render(<QuizPlatform />);
+}
+if (typeof document !== "undefined") { client(); }
+
+export default async function server(request: Request): Promise<Response> {
+  const { sqlite } = await import("https://esm.town/v/stevekrouse/sqlite");
+  const KEY = new URL(import.meta.url).pathname.split("/").at(-1);
+  const SCHEMA_VERSION = 1;
+
+  await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS ${KEY}_quizzes_${SCHEMA_VERSION} (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      questions TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS ${KEY}_quiz_attempts_${SCHEMA_VERSION} (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      quiz_id INTEGER NOT NULL,
+      answers TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(quiz_id) REFERENCES ${KEY}_quizzes_${SCHEMA_VERSION}(id)
+    )
+  `);
+
+  if (request.method === 'GET' && new URL(request.url).pathname === '/quizzes') {
+    const quizzes = await sqlite.execute(`SELECT * FROM ${KEY}_quizzes_${SCHEMA_VERSION} ORDER BY created_at DESC`);
+    return new Response(JSON.stringify(quizzes.rows.map(quiz => ({
+      ...quiz,
+      questions: JSON.parse(quiz.questions)
+    }))), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  if (request.method === 'POST' && new URL(request.url).pathname === '/quizzes') {
+    const quizData = await request.json();
+    await sqlite.execute(`
+      INSERT INTO ${KEY}_quizzes_${SCHEMA_VERSION} 
+      (title, description, questions) 
+      VALUES (?, ?, ?)
+    `, [
+      quizData.title, 
+      quizData.description, 
+      JSON.stringify(quizData.questions)
+    ]);
+    return new Response(JSON.stringify({ message: 'Quiz created successfully' }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  if (request.method === 'POST' && new URL(request.url).pathname === '/submit-quiz') {
+    const quizAttempt = await request.json();
+    const quizResult = await sqlite.execute(`
+      SELECT questions FROM ${KEY}_quizzes_${SCHEMA_VERSION} WHERE id = ?
+    `, [quizAttempt.quizId]);
+
+    const questions = JSON.parse(quizResult.rows[0].questions);
+    const score = quizAttempt.answers.reduce((total, answer, index) => 
+      answer === questions[index].correctAnswer ? total + 1 : total, 0
+    );
+
+    await sqlite.execute(`
+      INSERT INTO ${KEY}_quiz_attempts_${SCHEMA_VERSION} 
+      (quiz_id, answers, score) 
+      VALUES (?, ?, ?)
+    `, [
+      quizAttempt.quizId,
+      JSON.stringify(quizAttempt.answers),
+      score
+    ]);
+
+    return new Response(JSON.stringify({ score }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  return new Response(`
+    <html>
+      <head>
+        <title>Quiz Master</title>
+        <style>${css}</style>
+      </head>
+      <body>
+        <div id="root"></div>
+        <script src="https://esm.town/v/std/catch"></script>
+        <script type="module" src="${import.meta.url}"></script>
+      </body>
+    </html>
+  `, {
+    headers: { 'Content-Type': 'text/html' }
+  });
+}
+
+const css = `
+body {
+  font-family: 'Arial', sans-serif;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #f0f4f8;
+}
+
+.quiz-platform {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.quiz-search input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 20px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.quiz-creation-form {
+  background-color: #f9f9f9;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.quiz-creation-form input, 
+.quiz-creation-form textarea,
+.quiz-creation-form select {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.quiz-card, .quiz-question {
+  background-color: white;
+  border: 1px solid #eee;
+  padding: 15px;
+  margin-bottom: 15px;
+  border-radius: 6px;
+}
+
+.quiz-attempt button {
+  margin: 5px;
+  padding: 10px;
+  border: 1px solid #007bff;
+  background-color: white;
+  color: #007bff;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.quiz-attempt button.selected-answer {
+  background-color: #007bff;
+  color: white;
+}
+
+button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+.quiz-form-actions {
+  display: flex;
+  justify-content: space-between;
+}
+`;
